@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="直播互动助手">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#03d6b0"/>
+      <stop offset="1" stop-color="#2b6cff"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#bg)"/>
+  <path d="M16 19h32a5 5 0 0 1 5 5v17a5 5 0 0 1-5 5H31l-10 9v-9h-5a5 5 0 0 1-5-5V24a5 5 0 0 1 5-5z" fill="#ffffff" opacity="0.96"/>
+  <g fill="#2b6cff">
+    <rect x="22" y="28" width="3.4" height="9" rx="1.7"/>
+    <rect x="29" y="24" width="3.4" height="17" rx="1.7"/>
+    <rect x="36" y="27" width="3.4" height="11" rx="1.7"/>
+  </g>
+</svg>

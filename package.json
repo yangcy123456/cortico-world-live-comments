@@ -1,0 +1,76 @@
+{
+  "name": "cortico-world-live-comments",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "直播互动助手：读直播软件互动栏的弹幕、礼物、关注和进场，交给当前 Coo 人格回复，自带 Edge 语音朗读与可删改的弹幕记忆。",
+  "main": "index.js",
+  "exports": "./index.js",
+  "keywords": [
+    "cortico-world",
+    "cortico",
+    "live",
+    "streaming",
+    "danmaku",
+    "bilibili",
+    "tts",
+    "ocr"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "index.js",
+    "lib/**",
+    "dist/**",
+    "vendor/**",
+    "native/**",
+    "assets/**",
+    "ENV_PROMPT.md",
+    "describe.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "author": "yangcy123456 <2176975366@qq.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yangcy123456/cortico-world-live-comments.git"
+  },
+  "homepage": "https://github.com/yangcy123456/cortico-world-live-comments#readme",
+  "bugs": {
+    "url": "https://github.com/yangcy123456/cortico-world-live-comments/issues"
+  },
+  "cortico": {
+    "kind": "world",
+    "api": 6,
+    "displayName": "直播互动助手",
+    "icon": "assets/icon.svg",
+    "webUiClient": "dist/webui.js",
+    "webUiStyle": "dist/webui.css",
+    "describe": "describe.json",
+    "tags": [
+      "streaming",
+      "live",
+      "danmaku",
+      "tts"
+    ],
+    "locales": {
+      "zh": {
+        "displayName": "直播互动助手",
+        "description": "读直播软件的弹幕、礼物与关注，用当前 Coo 人格回复并朗读，附带可删改的弹幕记忆。"
+      },
+      "en": {
+        "displayName": "Live Comments",
+        "description": "Reads the comment panel of your streaming app, replies with the current Coo persona, speaks the reply with its own Edge TTS engine, and keeps an editable comment memory."
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check.mjs"
+  },
+  "dependencies": {
+    "mpg123-decoder": "^1.0.3",
+    "ws": "^8.22.0"
+  }
+}

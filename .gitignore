@@ -1,0 +1,4 @@
+﻿_backups/
+evidence/
+node_modules/
+*.tgz
