@@ -77,3 +77,24 @@ test('Coo reply echoes are visible but not fed back',async t=>{
   h.w.bridge.request=async()=>({window:h.ctx.cfg.layout,ocr:{lines:[{text:'大肥鱼：你好呀'}]}})
   await h.w.poll(h.w.epoch);await h.w.poll(h.w.epoch);assert.equal(h.w.rows.at(-1).state,'self-echo');assert.equal(h.events.length,0)
 })
+
+test('Douyin comments are not blocked by an enabled Bili input on another platform',t=>{
+  const h=harness(t);h.ready();h.root.worlds['bili-live'].enabled=true;h.save();h.ctx.cfg.target={processName:'直播伴侣',title:'直播伴侣'}
+  assert.equal(h.w.integrations().sourceConflict,false);h.w.setFeed(true);assert.equal(h.w.feed,true)
+  assert.equal(h.root.worlds['bili-live'].enabled,true,'the other platform configuration is preserved')
+  h.ctx.cfg.target={processName:'livehime',title:'哔哩哔哩直播姬'};assert.equal(h.w.integrations().sourceConflict,true)
+})
+
+test('a one-shot recognition check does not feed, store audience memory or start monitoring',async t=>{
+  const h=harness(t);h.w.bridge.request=async()=>({window:h.ctx.cfg.layout,backend:'Windows.Graphics.Capture',ocr:{lines:[{text:'123'}]}})
+  const s=await h.w.checkCapture();assert.equal(s.visible[0].text,'123');assert.equal(s.running,false);assert.equal(s.feed,false)
+  assert.equal(s.captureStatus.code,'checked');assert.equal(h.events.length,0);assert.equal(s.memory.size,0)
+})
+
+test('Douyin recap preview cannot be saved as a comment crop or started',async t=>{
+  const h=harness(t);h.ctx.cfg.target={processName:'直播伴侣',title:'直播伴侣'}
+  h.w.bridge.request=async()=>({window:h.ctx.cfg.layout,png:'',ocr:{lines:[{text:'直播已结束'},{text:'数据汇总'}]}})
+  assert.equal((await h.w.getPreview()).page,'ended')
+  await assert.rejects(h.w.configure({crop:h.ctx.cfg.crop}),/复盘/)
+  await assert.rejects(h.w.begin(),/复盘/)
+})

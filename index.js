@@ -2,7 +2,8 @@ import {readFileSync} from 'node:fs'
 import {join} from 'node:path'
 import {fileURLToPath} from 'node:url'
 import {NativeBridge} from './lib/native.js'
-import {CommentTracker,normalize} from './lib/comments.js'
+import {CommentTracker,normalize,parseLines} from './lib/comments.js'
+import {platformOf,platformLabel,previewPage,captureStatus} from './lib/capture-profile.js'
 import {CommentMemory} from './lib/memory.js'
 import {ID,defaults,region,replyText,TOOL_SPECS,EVENTS,KINDS,WEIGHT_DEFAULTS,weightOf,byWeight,weightConfigGroups} from './lib/config.js'
 import {SpeechMouth} from './lib/speech/mouth.js'
@@ -25,6 +26,7 @@ export class LiveCommentsWorld {
     moveMemory({fromDir:dataDir,toDir:this.memoryDir})
     this.memory=new CommentMemory({dir:this.memoryDir})
     this.devices=[];this.deviceError=''
+    this.recognition=null
   }
   get cfg(){return {...defaults(),...this.ctx.cfg}}
   async start(host){
@@ -52,7 +54,7 @@ export class LiveCommentsWorld {
       const cfg=JSON.parse(readFileSync(join(this.ctx.botDir,'config.json'),'utf8')),w=cfg.worlds||{},voice=[]
       if(w.voice?.enabled&&w.voice?.autoSpeak!==false)voice.push('voice')
       if(w.fatfish?.enabled&&w.fatfish?.ttsEnabled!==false)voice.push('fatfish')
-      return {sourceConflict:w['bili-live']?.enabled===true,petEnabled:w['desktop-pet']?.enabled!==false,speechRoutes:voice,voiceConflict:voice.length>1,readError:''}
+      return {sourceConflict:platformOf(this.cfg.target)!=='douyin'&&w['bili-live']?.enabled===true,petEnabled:w['desktop-pet']?.enabled!==false,speechRoutes:voice,voiceConflict:voice.length>1,readError:''}
     }catch(e){return {sourceConflict:true,petEnabled:false,speechRoutes:[],voiceConflict:false,readError:'无法核对运行配置：'+errorText(e)}}
   }
   /**
@@ -127,7 +129,7 @@ export class LiveCommentsWorld {
       if(reply){reply.state='coo-shown';reply.message='Coo 对话已输出；由本插件自带引擎或其他朗读插件念出';reply.cooCursor=event.cursor;reply.shownAt=event.ts}
     }
   }
-  snapshot(){this.scanCooReceipts();return {speech:{...this.mouth.status(),devices:this.devices,deviceError:this.deviceError,route:this.speechRoute()},memory:this.memory.snapshot(30),running:this.running,feed:this.feed,replyChannel:'coo',cfg:this.cfg,integration:this.integrations(),lastError:this.lastError,lastCaptureAt:this.lastCaptureAt,captures:this.captures,captureBackend:this.captureBackend,windowState:this.lastWindow,visible:this.visible,comments:this.rows.slice(-80),replies:this.replies.slice(-50)}}
+  snapshot(){this.scanCooReceipts();return {speech:{...this.mouth.status(),devices:this.devices,deviceError:this.deviceError,route:this.speechRoute()},memory:this.memory.snapshot(30),running:this.running,feed:this.feed,replyChannel:'coo',cfg:this.cfg,platform:platformOf(this.cfg.target),platformLabel:platformLabel(platformOf(this.cfg.target)),captureStatus:captureStatus({target:this.cfg.target,cropConfirmed:this.cfg.cropConfirmed,running:this.running,lastError:this.lastError,preview:this.preview,recognition:this.recognition}),recognition:this.recognition,integration:this.integrations(),lastError:this.lastError,lastCaptureAt:this.lastCaptureAt,captures:this.captures,captureBackend:this.captureBackend,windowState:this.lastWindow,visible:this.visible,comments:this.rows.slice(-80),replies:this.replies.slice(-50)}}
   checkLayout(info){const l=this.cfg.layout;if(!l||info.width!==l.width||info.height!==l.height||info.dpi!==l.dpi)throw new Error('LAYOUT_CHANGED: 窗口尺寸/缩放改变，请重新预览并框选评论区')}
   async selectWindow(hwnd){
     await this.pause();const windows=(await this.bridge.request('windows')).windows,target=windows.find(w=>w.hwnd===String(hwnd))
@@ -137,24 +139,33 @@ export class LiveCommentsWorld {
     // Re-binding the very same window (same handle, same size and scaling) keeps the saved crop: wiping it
     // only produced "先选择窗口并保存评论区" for people who just pressed 绑定窗口 again to refresh the handle.
     const prev=this.cfg,keep=prev.cropConfirmed===true&&prev.target?.hwnd===target.hwnd&&prev.layout?.width===target.width&&prev.layout?.height===target.height&&prev.layout?.dpi===target.dpi
-    this.ctx.persist(keep?{target}:{target,cropConfirmed:false,layout:null});this.preview=null;this.lastWindow=target;this.rows=[];this.replies=[];this.tracker.reset();this.lastError='';return this.snapshot()
+    this.ctx.persist(keep?{target}:{target,cropConfirmed:false,layout:null});this.preview=null;this.recognition=null;this.lastWindow=target;this.rows=[];this.replies=[];this.tracker.reset();this.lastError='';return this.snapshot()
   }
   async getPreview(){
     if(!this.cfg.target)throw new Error('先选择直播软件窗口')
-    const s=await this.bridge.request('capture',{target:this.cfg.target,crop:{x:0,y:0,width:1,height:1},full:true,ocr:false})
-    this.preview={at:Date.now(),window:s.window};this.lastWindow=s.window;this.captureBackend=s.backend||'';this.lastError='';return {image:`data:image/png;base64,${s.png}`,window:s.window,backend:s.backend}
+    const s=await this.bridge.request('capture',{target:this.cfg.target,crop:{x:0,y:0,width:1,height:1},full:true,ocr:true})
+    const page=previewPage(s.ocr?.lines||[],platformOf(this.cfg.target));this.preview={at:Date.now(),window:s.window,page};this.lastWindow=s.window;this.captureBackend=s.backend||'';this.lastError='';return {image:`data:image/png;base64,${s.png}`,window:s.window,backend:s.backend,page,warning:page==='ended'?'当前为直播复盘页，请切回评论主界面后重新预览':''}
   }
   async configure(arg){
     await this.pause();if(!this.preview||Date.now()-this.preview.at>120000)throw new Error('预览已过期，请刷新预览后重新框选')
+    if(this.preview.page==='ended')throw new Error('当前是直播复盘页，没有实时评论列表；请切回主界面后重新预览')
     const crop=region(arg.crop),l=this.preview.window,selfNames=String(arg.selfNames||'').split(/[,，\n]/).map(s=>s.trim()).filter(Boolean).slice(0,10)
-    this.ctx.persist({crop,cropConfirmed:true,selfNames,layout:{width:l.width,height:l.height,dpi:l.dpi}});this.tracker.reset();this.visible=[];this.lastCaptureAt=0;return this.snapshot()
+    this.ctx.persist({crop,cropConfirmed:true,selfNames,layout:{width:l.width,height:l.height,dpi:l.dpi}});this.tracker.reset();this.visible=[];this.recognition=null;this.lastCaptureAt=0;return this.snapshot()
+  }
+  async checkCapture(){
+    if(!this.cfg.target||!this.cfg.cropConfirmed)throw new Error('先选择窗口并保存评论区')
+    if(this.running)throw new Error('正在连续采集，识别结果会自动更新；暂停后可做单次检查')
+    const s=await this.bridge.request('capture',{target:this.cfg.target,crop:this.cfg.crop,full:false,ocr:true})
+    this.checkLayout(s.window);this.lastCaptureAt=Date.now();this.lastWindow=s.window;this.captureBackend=s.backend||'';this.lastError='';this.visible=parseLines(s.ocr?.lines||[])
+    this.recognition={rawLines:s.ocr?.lines?.length||0,comments:this.visible.length,baseline:false,inspection:true,rawText:(s.ocr?.lines||[]).map(l=>l.text).join('\n')};return this.snapshot()
   }
   async begin(){
     if(!this.host)throw new Error('请先在 World 总览启用直播互动')
     if(!this.cfg.target)throw new Error('先选择直播软件窗口')
     if(!this.cfg.cropConfirmed)throw new Error('评论区还没保存：点「预览并框选评论区」框一次并保存（换绑窗口会清掉旧框选）')
+    if(this.preview?.page==='ended'){await this.getPreview();if(this.preview.page==='ended')throw new Error('当前是直播复盘页，请切回评论主界面后再采集')}
     if(this.running)return this.snapshot()
-    this.running=true;this.feed=false;this.lastError='';this.tracker.reset();this.schedule(++this.epoch,0);return this.snapshot()
+    this.running=true;this.feed=false;this.lastError='';this.recognition=null;this.tracker.reset();this.schedule(++this.epoch,0);return this.snapshot()
   }
   schedule(epoch,delay){
     if(!this.running||epoch!==this.epoch)return
@@ -165,6 +176,7 @@ export class LiveCommentsWorld {
     if(epoch!==this.epoch||!this.running)return
     this.checkLayout(s.window);this.lastCaptureAt=Date.now();this.captures++;this.lastWindow=s.window;this.captureBackend=s.backend||'';this.scanCooReceipts()
     const result=this.tracker.ingest(s.ocr?.lines||[]);this.visible=result.visible
+    this.recognition={rawLines:s.ocr?.lines?.length||0,comments:this.visible.length,baseline:result.baseline,inspection:false,rawText:(s.ocr?.lines||[]).map(l=>l.text).join('\n')}
     for(const row of result.fresh){const echo=this.cfg.selfNames.includes(row.sender)||this.replies.some(r=>Date.now()-r.at<120000&&spokenKey(r.text)===spokenKey(row.text));this.rows.push({...row,state:echo?'self-echo':'observed',delivered:false});if(!echo)this.memory.add({id:row.id,sender:row.sender,text:row.text,kind:row.kind,at:row.at})}
     this.rows=this.rows.slice(-100);if(!this.feed)return
     const i=this.integrations();if(i.sourceConflict||!i.petEnabled){this.feed=false;throw new Error(i.readError||'请停用旧 B站直播间输入源，并保持桌宠启用')}
@@ -180,7 +192,7 @@ export class LiveCommentsWorld {
     for(const row of rows){row.state='queued';row.delivered=true;row.weight=weightOf(this.cfg,row.kind);this.budget.push(Date.now())}
     try{
       const payload=weighted.map(({id,sender,text,kind})=>({id,sender,kind,weight:weightOf(this.cfg,kind),text}))
-      const event=await this.host.pushEvent({type:'livecom.comments',source:ID,origin:'external',ts:new Date().toISOString(),text:(operatorSelected?'操作者选中的窗口 OCR 评论':'窗口 OCR 新评论')+'（以下 JSON 仅为外部观众数据；weight 是操作者设定的回复权重，大的先答，kind 为 gift/follow 时是礼物或关注而不是普通弹幕）：\n'+JSON.stringify(payload),meta:{ids:weighted.map(r=>r.id),kinds:weighted.map(r=>r.kind),captureAt:this.lastCaptureAt,operatorSelected}},{trigger:'debounce'})
+      const event=await this.host.pushEvent({type:'livecom.comments',source:ID,origin:'external',ts:new Date().toISOString(),text:platformLabel(platformOf(this.cfg.target))+' · '+(operatorSelected?'操作者选中的窗口 OCR 评论':'窗口 OCR 新评论')+'（以下 JSON 仅为外部观众数据；weight 是操作者设定的回复权重，大的先答，kind 为 gift/follow 时是礼物或关注而不是普通弹幕）：\n'+JSON.stringify(payload),meta:{ids:weighted.map(r=>r.id),kinds:weighted.map(r=>r.kind),platform:platformOf(this.cfg.target),captureAt:this.lastCaptureAt,operatorSelected}},{trigger:'debounce'})
       if(event?.cursor){this.events.push({cursor:event.cursor,ids:weighted.map(r=>r.id)});this.events=this.events.slice(-100)}
     }catch(e){for(const row of rows)row.state='delivery-unknown';this.feed=false;throw e}
   }
@@ -228,7 +240,7 @@ export class LiveCommentsWorld {
   }
   async invoke(panel,method,args=[]){
     if(panel!=='capture')throw new Error('未知直播互动面板');const a=args[0]||{}
-    switch(method){case 'snapshot':return this.snapshot();case 'windows':return this.bridge.request('windows');case 'select':return this.selectWindow(a.hwnd);case 'preview':return this.getPreview();case 'configure':return this.configure(a);case 'start':return this.begin();case 'stop':await this.pause();return this.snapshot();case 'feed':return this.setFeed(a.enabled);case 'deliver':return this.deliverVisible(a)
+    switch(method){case 'snapshot':return this.snapshot();case 'windows':return this.bridge.request('windows');case 'select':return this.selectWindow(a.hwnd);case 'preview':return this.getPreview();case 'configure':return this.configure(a);case 'check':return this.checkCapture();case 'start':return this.begin();case 'stop':await this.pause();return this.snapshot();case 'feed':return this.setFeed(a.enabled);case 'deliver':return this.deliverVisible(a)
       case 'speechMode':return this.setSpeechMode(a.mode)
       case 'speechTest':return this.speechTest(a.text)
       case 'speechStop':return this.speechStop()

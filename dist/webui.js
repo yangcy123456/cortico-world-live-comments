@@ -16,20 +16,21 @@ export default {panels:{capture:{mount(ctx){
     for(const w of list){const o=el('option',`${w.title} · ${w.processName}${w.minimized?'（最小化）':w.onCurrentDesktop===false?'（其他桌面）':''}`);o.value=w.hwnd;select.append(o)}
   }),button('绑定窗口',()=>invoke('select',{hwnd:select.value}),'lw-primary'),button('预览并框选评论区',async()=>{
     const p=await invoke('preview'),im=doc.createElement('img');await new Promise((resolve,reject)=>{im.onload=resolve;im.onerror=reject;im.src=p.image})
-    if(disposed)return;image=im;crop={...state.cfg.crop};preview.hidden=false;draw()
+    if(disposed)return;image=im;crop={...state.cfg.crop};preview.hidden=false;draw();if(p.warning)error.textContent=p.warning
   }));setup.append(bar,el('div','按窗口采集，允许被覆盖或放在其他桌面；保持直播软件未最小化。回复显示在 Coo 对话和气泡里。','lw-note'));root.append(setup)
   const preview=el('section',undefined,'lw-preview');preview.hidden=true;preview.append(el('h3','2. 框选右下角评论列表'))
   const canvas=el('canvas'),names=el('input');names.placeholder='可选：忽略的昵称，多个用逗号分隔';names.className='lw-grow'
   preview.append(canvas,el('div','拖出评论列表区域，要同时覆盖「礼物」和「弹幕」两栏（右侧整条互动栏最稳）。排除输入框、标题和工具栏。窗口尺寸或缩放变化后重新框选。','lw-note'))
-  const save=el('div',undefined,'lw-bar');save.append(names,button('框选整个互动栏（礼物+弹幕）',async()=>{crop={x:0.828,y:0.30,width:0.170,height:0.690};draw()},undefined),button('保存评论区',()=>invoke('configure',{crop,selfNames:names.value}),'lw-primary'));preview.append(save);root.append(preview)
+  const save=el('div',undefined,'lw-bar');save.append(names,button('框选右侧互动栏（参考范围）',async()=>{crop={x:0.828,y:0.30,width:0.170,height:0.630};draw()},undefined),button('保存评论区',()=>invoke('configure',{crop,selfNames:names.value}),'lw-primary'));preview.append(save);root.append(preview)
   function draw(){if(!image)return;canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;const g=canvas.getContext('2d');g.drawImage(image,0,0);if(crop){g.strokeStyle='#03d6b0';g.lineWidth=3;g.strokeRect(crop.x*canvas.width,crop.y*canvas.height,crop.width*canvas.width,crop.height*canvas.height)}}
   const pos=e=>{const r=canvas.getBoundingClientRect();return{x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))}}
   canvas.onpointerdown=e=>{canvas.setPointerCapture(e.pointerId);drag=pos(e)}
   canvas.onpointerup=e=>{if(!drag)return;const p=pos(e);crop={x:Math.min(p.x,drag.x),y:Math.min(p.y,drag.y),width:Math.abs(p.x-drag.x),height:Math.abs(p.y-drag.y)};drag=null;draw()}
   const run=el('section');run.append(el('h3','3. 读取评论，交给当前 Coo 人格回复'))
-  const controls=el('div',undefined,'lw-bar'),start=button('开始采集',()=>invoke('start'),'lw-primary'),stop=el('button','立即暂停','lw-danger'),feed=button('开启 Coo 回复',()=>invoke('feed',{enabled:!state?.feed}))
+  const controls=el('div',undefined,'lw-bar'),start=button('开始采集',()=>invoke('start'),'lw-primary'),stop=el('button','立即暂停','lw-danger'),feed=button('开启 Coo 回复',()=>invoke('feed',{enabled:!state?.feed})),check=button('检查识别（不回复）',()=>invoke('check'))
   stop.onclick=async()=>{generation++;try{render(await invoke('stop'))}catch(e){error.textContent=String(e.message||e)}}
-  controls.append(start,stop,feed);run.append(controls,el('div','首帧只记录历史。新评论连续两帧出现后交给 Coo；也可手动选一条当前可见评论。声音由本插件自带引擎念出（第 4 步），引擎不可用时交给已装的朗读插件。','lw-note'))
+  const captureHint=el('div','','lw-state')
+  controls.append(start,stop,feed,check);run.append(controls,captureHint,el('div','保存评论区后，可先“检查识别（不回复）”。首帧只记录历史，新评论连续两帧出现后交给 Coo；要回应现有消息，可手动选一条。抖音和 B站属于不同平台，可分别读取。','lw-note'))
   const kindLabels={chat:'弹幕',gift:'礼物',follow:'关注',enter:'进场'}
   const weightBar=el('div',undefined,'lw-bar'),weightInputs={}
   for(const kind of ['chat','gift','follow','enter']){
@@ -39,6 +40,7 @@ export default {panels:{capture:{mount(ctx){
   }
   run.append(el('div','回复权重：数字越大越先交给 Coo，0 表示这类消息只显示、不投喂。礼物默认 3、弹幕 1、关注/粉丝团 1.5、进场 0；改完立即生效，也会存进设置分组「回复权重」。','lw-note'),weightBar)
   const visible=el('div','','lw-scroll'),comments=el('div','','lw-scroll');run.append(el('h3','识别到的文字'),visible,el('h3','新评论处理状态'),comments);root.append(run)
+  const rawDetails=el('details'),rawText=el('pre','','lw-scroll');rawDetails.append(el('summary','查看识别原文'),rawText);run.append(rawDetails)
   const speech=el('section');speech.append(el('h3','4. 语音朗读（插件自带引擎）'))
   const speechLine=el('div','','lw-state'),modeSelect=el('select'),deviceSelect=el('select'),testText=el('input')
   testText.className='lw-grow';testText.placeholder='试听文字（留空则念一句默认测试）'
@@ -56,8 +58,8 @@ export default {panels:{capture:{mount(ctx){
   root.append(memorySection)
   const replies=el('section'),replyList=el('div');replies.append(el('h3','Coo 回复与对话回执'),replyList);root.append(replies)
   function render(s){if(disposed)return;state=s;status.textContent=`${s.running?'采集中':'已暂停'} · ${s.feed?'Coo 回复已开启':'仅识别'} · 回复到 Coo 对话`
-    note.textContent=[`窗口：${s.cfg.target?.title||'未选'}；沿用当前模型、人格和记忆。`,s.captureBackend?`窗口采集已连接${s.windowState?.onCurrentDesktop===false?'（位于其他桌面）':''}。`:'',s.integration.readError||(s.integration.sourceConflict?'请先停用旧 B站输入源，避免重复读取。':''),`朗读：${s.integration.speechRoutes.join('、')||'未开启'}。`,s.integration.voiceConflict?'两路自动朗读同时开启，请保留一路。':'',s.lastError].filter(Boolean).join('\n')
-    start.disabled=s.running||!s.cfg.cropConfirmed;feed.disabled=!s.running;feed.textContent=s.feed?'停止 Coo 回复':'开启 Coo 回复'
+    note.textContent=[`窗口：${s.cfg.target?.title||'未选'}；${s.platformLabel||'直播软件'}；沿用当前模型、人格和记忆。`,s.captureBackend?`窗口采集已连接${s.windowState?.onCurrentDesktop===false?'（位于其他桌面）':''}。`:'',s.integration.readError||(s.integration.sourceConflict?'同一平台的 B站输入源仍启用，请保留一路，避免重复读取。':''),`朗读：${s.integration.speechRoutes.join('、')||'未开启'}。`,s.integration.voiceConflict?'两路自动朗读同时开启，请保留一路。':'',s.lastError].filter(Boolean).join('\n')
+    start.disabled=s.running||!s.cfg.cropConfirmed;check.disabled=s.running||!s.cfg.cropConfirmed;feed.disabled=!s.running;feed.textContent=s.feed?'停止 Coo 回复':'开启 Coo 回复';captureHint.textContent=s.captureStatus?.message||'';rawText.textContent=s.recognition?.rawText||'尚未读取评论区文字'
     visible.replaceChildren(...s.visible.map(r=>{const row=el('div',undefined,'lw-row'),b=button('交给 Coo 回复',()=>invoke('deliver',{raw:r.raw}));b.disabled=!s.feed;row.append(el('span',`[${kindLabels[r.kind]||r.kind||'弹幕'}] ${r.raw}`),' ',b);return row}));if(!s.visible.length)visible.textContent='等待直播互动'
     comments.replaceChildren(...s.comments.slice(-30).map(r=>el('div',`[${kindLabels[r.kind]||r.kind||'弹幕'} · 权重 ${r.weight??'-'}] ${r.sender}：${r.text} · ${labels[r.state]||r.state}`,'lw-row')))
     replyList.replaceChildren(...s.replies.slice(-30).map(r=>el('div',`${r.text}\n${labels[r.state]||r.state} · ${r.message||''}`,'lw-row')));if(!s.replies.length)replyList.textContent='等待 Coo 回复'

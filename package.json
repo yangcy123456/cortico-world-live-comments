@@ -1,8 +1,8 @@
 {
   "name": "cortico-world-live-comments",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
-  "description": "直播互动助手：读直播软件互动栏的弹幕、礼物、关注和进场，交给当前 Coo 人格回复，自带 Edge 语音朗读与可删改的弹幕记忆。",
+  "description": "支持 B 站直播姬和抖音直播伴侣：读取直播评论、礼物与关注，由当前 Coo 人格回复；自带 Edge 语音朗读和可编辑弹幕记忆。",
   "main": "index.js",
   "exports": "./index.js",
   "keywords": [
@@ -12,6 +12,8 @@
     "streaming",
     "danmaku",
     "bilibili",
+    "douyin",
+    "抖音",
     "tts",
     "ocr"
   ],
@@ -57,17 +59,17 @@
     "locales": {
       "zh": {
         "displayName": "直播互动助手",
-        "description": "读直播软件的弹幕、礼物与关注，用当前 Coo 人格回复并朗读，附带可删改的弹幕记忆。"
+        "description": "支持 B 站直播姬与抖音直播伴侣；读弹幕、礼物和关注，用当前 Coo 人格回复并朗读，附带可删改的弹幕记忆。"
       },
       "en": {
         "displayName": "Live Comments",
-        "description": "Reads the comment panel of your streaming app, replies with the current Coo persona, speaks the reply with its own Edge TTS engine, and keeps an editable comment memory."
+        "description": "Supports Bilibili Live Studio and Douyin Live Companion. Reads comments, gifts, and follows, replies with the current Coo persona, speaks replies with its own Edge TTS engine, and keeps an editable comment memory."
       }
     }
   },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "check": "node scripts/check.mjs"
+    "check": "node --experimental-transform-types scripts/check.mjs"
   },
   "dependencies": {
     "mpg123-decoder": "^1.0.3",
